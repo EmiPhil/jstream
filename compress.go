@@ -2,13 +2,15 @@ package jstream
 
 import (
 	"bytes"
-	"encoding/gob"
+	"encoding/binary"
 	"encoding/json"
 )
 
+const RecordSeparator rune = '␞'
+
 type Compress struct {
-	next int
-	dict map[string]int
+	next uint64
+	dict map[string]uint64
 }
 
 func RecurseMap(m *map[string]interface{}, cb func(string, string, interface{}), path string) {
@@ -29,6 +31,7 @@ func (c *Compress) Deflate(j json.RawMessage) ([]byte, error) {
 	}
 
 	buf := &bytes.Buffer{}
+	valbuf := make([]byte, binary.MaxVarintLen64)
 
 	RecurseMap(m, func(path, key string, value interface{}) {
 		val, ok := c.dict[path+"."+key]
@@ -37,6 +40,10 @@ func (c *Compress) Deflate(j json.RawMessage) ([]byte, error) {
 			val = c.next
 			c.next++
 		}
+
+		n := binary.PutUvarint(valbuf, val)
+		buf.Write(valbuf[:n])
+		buf.WriteRune(RecordSeparator)
 
 	}, "")
 
